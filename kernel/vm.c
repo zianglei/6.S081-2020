@@ -348,6 +348,30 @@ uvmclear(pagetable_t pagetable, uint64 va)
   *pte &= ~PTE_U;
 }
 
+static void
+subpteprint(pagetable_t pagetable, int level)
+{
+	for(int i = 0; i < 512; i++) {
+		pte_t pte = pagetable[i];
+		if (pte & PTE_V) {
+			// This PTE points to a lower level page table.
+			int j = level;
+			while(--j > 0) printf(".. ");
+			printf("..");
+			uint64 child = PTE2PA(pte);
+			printf("%d: pte %p pa %p\n", i, pte, child);
+			if ((pte & (PTE_R | PTE_W | PTE_X)) == 0)
+				subpteprint((pagetable_t)child, level + 1);
+		}
+	}
+}
+
+void
+vmprint(pagetable_t pagetable) {
+	printf("page table %p\n", pagetable);
+	subpteprint(pagetable, 1);
+}
+
 // Copy from kernel to user.
 // Copy len bytes from src to virtual address dstva in a given page table.
 // Return 0 on success, -1 on error.
