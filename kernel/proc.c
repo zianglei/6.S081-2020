@@ -148,8 +148,12 @@ freeproc(struct proc *p)
   if(p->trapframe)
     kfree((void*)p->trapframe);
   p->trapframe = 0;
-  if(p->kstack)
-	uvmunmap(p->kpagetable, p->kstack, 1, 1);
+  if(p->kstack) {
+	pte_t* pte = walk(p->kpagetable, p->kstack, 0);
+	if (pte == 0)
+		panic("freeproc: walk");
+	kfree((void*)PTE2PA(*pte));
+  }
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
   if(p->kpagetable)
@@ -527,9 +531,12 @@ scheduler(void)
         p->state = RUNNING;
         c->proc = p;
 		
-		uvminithart(p->kpagetable);
+		w_satp(MAKE_SATP(p->kpagetable));
+		sfence_vma();
         swtch(&c->context, &p->context);
 
+
+	    kvminithart();
         // Process is done running for now.
         // It should have changed its p->state before coming back.
         c->proc = 0;
@@ -540,7 +547,6 @@ scheduler(void)
     }
 #if !defined (LAB_FS)
     if(found == 0) {
-	  kvminithart();
       intr_on();
       asm volatile("wfi");
     }
