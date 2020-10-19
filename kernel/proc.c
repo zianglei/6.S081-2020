@@ -15,6 +15,8 @@ struct proc *initproc;
 int nextpid = 1;
 struct spinlock pid_lock;
 
+extern pagetable_t kernel_pagetable;
+
 extern void forkret(void);
 static void wakeup1(struct proc *chan);
 static void freeproc(struct proc *p);
@@ -30,7 +32,15 @@ procinit(void)
   
   initlock(&pid_lock, "nextpid");
   for(p = proc; p < &proc[NPROC]; p++) {
-      initlock(&p->lock, "proc");
+    initlock(&p->lock, "proc");
+	char *pa = kalloc();
+    if(pa == 0)
+      panic("kalloc");
+    uint64 va = KSTACK((int) (p - proc));
+
+    kvmmap(va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
+    p->kstack = va;
+
   }
   kvminithart();
 }
@@ -122,14 +132,7 @@ found:
   // Allocate a page for the process's kernel stack.
   // Map it high in memory, followed by an invalid
   // guard page.
-  char *pa = kalloc();
-  if(pa == 0)
-    panic("kalloc");
-  uint64 va = KSTACK((int) (p - proc));
-
-  uvmmap(p->kpagetable, va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
-  p->kstack = va;
-
+  
   // Set up new context to start executing at forkret,
   // which returns to user space.
   memset(&p->context, 0, sizeof(p->context));
@@ -148,12 +151,6 @@ freeproc(struct proc *p)
   if(p->trapframe)
     kfree((void*)p->trapframe);
   p->trapframe = 0;
-  if(p->kstack) {
-	pte_t* pte = walk(p->kpagetable, p->kstack, 0);
-	if (pte == 0)
-		panic("freeproc: walk");
-	kfree((void*)PTE2PA(*pte));
-  }
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
   if(p->kpagetable)
@@ -161,7 +158,6 @@ freeproc(struct proc *p)
 
   p->pagetable = 0;
   p->kpagetable = 0;
-  p->kstack = 0;
   p->sz = 0;
   p->pid = 0;
   p->parent = 0;
@@ -213,14 +209,13 @@ proc_kpagetable(struct proc* p)
   if (pagetable == 0)
 	return 0;
 
+  for(int i = 1; i < 512; i++)
+	  pagetable[i] = kernel_pagetable[i];
+
   uvmmap(pagetable, UART0, UART0, PGSIZE, PTE_R|PTE_W);
   uvmmap(pagetable, VIRTIO0, VIRTIO0, PGSIZE, PTE_R | PTE_W);
   uvmmap(pagetable, CLINT, CLINT, 0x10000, PTE_R | PTE_W);
   uvmmap(pagetable, PLIC, PLIC, 0x400000, PTE_R|PTE_W);
-  uvmmap(pagetable, KERNBASE, KERNBASE, (uint64)etext-KERNBASE, PTE_R | PTE_X);
-  uvmmap(pagetable, (uint64)etext, (uint64)etext, PHYSTOP-(uint64)etext, PTE_R|PTE_W);
-  uvmmap(pagetable, TRAMPOLINE, (uint64)trampoline, PGSIZE, PTE_R | PTE_X);
-  uvmmap(pagetable, TRAPFRAME, (uint64)(p->trapframe), PGSIZE, PTE_R | PTE_X);
 
   return pagetable;
 }
@@ -238,17 +233,19 @@ proc_freepagetable(pagetable_t pagetable, uint64 sz)
 void
 proc_freekpagetable(pagetable_t pagetable)
 {
+	uint64 pte = pagetable[0];
+	pagetable_t level1 = (pagetable_t)PTE2PA(pte);
+	
 	for(int i = 0; i < 512; i++) 
 	{
-		pte_t pte = pagetable[i];
+		pte_t pte = level1[i];
 		if(pte & PTE_V) {
-			if ((pte & (PTE_R | PTE_W | PTE_X)) == 0){
-				uint64 child = PTE2PA(pte);
-				proc_freekpagetable((pagetable_t)child);
-			}
-			pagetable[i] = 0;
+			uint64 level2 = PTE2PA(pte);
+			kfree((void*)level2);
 		}
+		level1[i] = 0;
 	}
+	kfree((void*)level1);
 	kfree((void*)pagetable);
 }
 
