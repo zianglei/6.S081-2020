@@ -285,6 +285,20 @@ uvmdealloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
   return newsz;
 }
 
+uint64
+ukvmdealloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
+{
+  if(newsz >= oldsz)
+	return oldsz;
+
+  if(PGROUNDUP(newsz) < PGROUNDUP(oldsz)){
+    int npages = (PGROUNDUP(oldsz) - PGROUNDUP(newsz)) / PGSIZE;
+    uvmunmap(pagetable, PGROUNDUP(newsz), npages, 0);
+  }
+
+  return newsz;
+}
+
 // Recursively free page-table pages.
 // All leaf mappings must already have been removed.
 void
@@ -349,6 +363,28 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
  err:
   uvmunmap(new, 0, i / PGSIZE, 1);
   return -1;
+}
+
+int
+ukvmcopy(pagetable_t up, pagetable_t kp, uint64 oldsz, uint64 newsz)
+{
+	pte_t *pte, *kpte;
+	uint64 a, last = newsz, i;
+	a = PGROUNDDOWN(oldsz);
+	for(i = a; i < last; i += PGSIZE) {
+		if ((pte = walk(up, i, 0)) == 0)
+			panic("ukvmcopy: pte should exist");
+		if ((*pte & PTE_V) == 0)
+			panic("ukvmcopy: page not present");
+		
+		kpte = walk(kp, i, 1);
+		if (kpte == 0) {
+			panic("ukvmcopy: no kpte");
+		}
+		*kpte = *pte;
+		*kpte &= ~(PTE_U);
+	}
+	return 0;
 }
 
 // mark a PTE invalid for user access.
@@ -419,23 +455,24 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 int
 copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
 {
-  uint64 n, va0, pa0;
+ // uint64 n, va0, pa0;
 
-  while(len > 0){
-    va0 = PGROUNDDOWN(srcva);
-    pa0 = walkaddr(pagetable, va0);
-    if(pa0 == 0)
-      return -1;
-    n = PGSIZE - (srcva - va0);
-    if(n > len)
-      n = len;
-    memmove(dst, (void *)(pa0 + (srcva - va0)), n);
+ // while(len > 0){
+ //   va0 = PGROUNDDOWN(srcva);
+ //   pa0 = walkaddr(pagetable, va0);
+ //   if(pa0 == 0)
+ //     return -1;
+ //   n = PGSIZE - (srcva - va0);
+ //   if(n > len)
+ //     n = len;
+ //   memmove(dst, (void *)(pa0 + (srcva - va0)), n);
 
-    len -= n;
-    dst += n;
-    srcva = va0 + PGSIZE;
-  }
-  return 0;
+ //   len -= n;
+ //   dst += n;
+ //   srcva = va0 + PGSIZE;
+ // }
+ // return 1;
+  return copyin_new(pagetable, dst, srcva, len);
 }
 
 // Copy a null-terminated string from user to kernel.
