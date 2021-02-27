@@ -16,6 +16,7 @@ void            brelse(struct buf*);
 void            bwrite(struct buf*);
 void            bpin(struct buf*);
 void            bunpin(struct buf*);
+void            backtrace(void);
 
 // console.c
 void            consoleinit(void);
@@ -80,6 +81,7 @@ int             pipewrite(struct pipe*, uint64, int);
 void            printf(char*, ...);
 void            panic(char*) __attribute__((noreturn));
 void            printfinit(void);
+void            backtrace();
 
 // proc.c
 int             cpuid(void);
