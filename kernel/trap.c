@@ -121,6 +121,7 @@ usertrap(void)
               }
           }
       }
+      yield();
   }
 
   usertrapret();
