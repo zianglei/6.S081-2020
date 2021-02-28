@@ -18,6 +18,32 @@ struct context {
   uint64 s11;
 };
 
+struct alarmcontext {
+    uint64 ra;
+    uint64 sp;
+    uint64 pc;
+
+    // caller-saved
+    uint64 t0;
+    uint64 t1;
+    uint64 t2;
+    uint64 t3;
+    uint64 t4;
+    uint64 t5;
+    uint64 t6;
+
+    uint64 a0;
+    uint64 a1;
+    uint64 a2;
+    uint64 a3;
+    uint64 a4;
+    uint64 a5;
+    uint64 a6;
+    uint64 a7;
+
+    // saved
+};
+
 // Per-CPU state.
 struct cpu {
   struct proc *proc;          // The process running on this cpu, or null.
@@ -93,8 +119,7 @@ struct proc {
   int killed;                  // If non-zero, have been killed
   int xstate;                  // Exit status to be returned to parent's wait
   int pid;                     // Process ID
-  int alarmtick;               // Alarm ticks to periodically call handler
-  void(*alarmhandler)();          // Handler function called when alarm
+
 
   // these are private to the process, so p->lock need not be held.
   uint64 kstack;               // Virtual address of kernel stack
@@ -106,4 +131,8 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+
+  int alarmticks;               // Alarm ticks to periodically call handler
+  void(*alarmhandler)();          // Handler function called when alarm
+  struct trapframe alarmframe ;  // Alarm context used to store registers when jump to handler
 };
