@@ -127,6 +127,10 @@ found:
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
 
+  p->ticks_last_call = 0;
+  p->alarmtick = 0;
+  p->alarmhandler = (void*)(uint64)(-1);
+
   return p;
 }
 
