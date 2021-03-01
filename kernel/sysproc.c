@@ -46,10 +46,15 @@ sys_sbrk(void)
 
   if(argint(0, &n) < 0)
     return -1;
-  addr = myproc()->sz;
-  // Change the process's memory size but not allocate physical memory
-  myproc()->sz += n;
 
+  struct proc* p = myproc();
+  addr = myproc()->sz;
+  if (n < 0) {
+      p->sz = uvmdealloc(p->pagetable, addr, addr + n);
+  } else {
+      // Change the process's memory size but not allocate physical memory
+      p->sz += n;
+  }
   return addr;
 }
 

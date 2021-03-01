@@ -67,18 +67,28 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0) {
       // ok
-  } else if (r_scause() == 13 || r_scause() == 15) {
+  } else if ((r_scause() == 13 || r_scause() == 15)
+        && r_stval() <= p->sz && r_stval() >= p->trapframe->sp) {
       uint64 faultaddr = r_stval();
-      uint64 newpageaddr = PGROUNDDOWN(faultaddr);
-      char* mem = kalloc();
-      if (mem == 0) {
-          panic("usertrap(): no more pages");
+
+      if (p->sz < faultaddr) {
+          // The virtual memory address is higher than the address that sbrk allocated.
+          p->killed = 1;
+      } else {
+          uint64 newpageaddr = PGROUNDDOWN(faultaddr);
+          char* mem = kalloc();
+          if (mem == 0) {
+              // kill the process if kalloc() fails.
+              p->killed = 1;
+          } else {
+              memset(mem, 0, PGSIZE);
+              if (mappages(p->pagetable, newpageaddr, PGSIZE, (uint64)mem, PTE_W | PTE_X | PTE_R | PTE_U) != 0) {
+                  kfree(mem);
+                  panic("usertrap(): map new page error");
+              }
+          }
       }
-      memset(mem, 0, PGSIZE);
-      if (mappages(p->pagetable, newpageaddr, PGSIZE, (uint64)mem, PTE_W | PTE_X | PTE_R | PTE_U) != 0) {
-          kfree(mem);
-          panic("usertrap(): map new page error");
-      }
+
   } else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
