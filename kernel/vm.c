@@ -5,6 +5,8 @@
 #include "riscv.h"
 #include "defs.h"
 #include "fs.h"
+#include "spinlock.h"
+#include "proc.h"
 
 /*
  * the kernel's page table.
@@ -88,6 +90,30 @@ walk(pagetable_t pagetable, uint64 va, int alloc)
   return &pagetable[PX(0, va)];
 }
 
+static void
+subpteprint(pagetable_t pagetable, int level)
+{
+  for(int i = 0; i < 512; i++) {
+    pte_t pte = pagetable[i];
+    if (pte & PTE_V) {
+      // This PTE points to a lower level page table.
+      int j = level;
+      while(--j > 0) printf(".. ");
+      printf("..");
+      uint64 child = PTE2PA(pte);
+      printf("%d: pte %p pa %p\n", i, pte, child);
+      if ((pte & (PTE_R | PTE_W | PTE_X)) == 0)
+        subpteprint((pagetable_t)child, level + 1);
+    }
+  }
+}
+
+void
+vmprint(pagetable_t pagetable) {
+  printf("page table %p\n", pagetable);
+  subpteprint(pagetable, 1);
+}
+
 // Look up a virtual address, return the physical address,
 // or 0 if not mapped.
 // Can only be used to look up user pages.
@@ -103,10 +129,29 @@ walkaddr(pagetable_t pagetable, uint64 va)
   pte = walk(pagetable, va, 0);
   if(pte == 0)
     return 0;
-  if((*pte & PTE_V) == 0)
+  if((*pte & PTE_V) == 0) {
+    // lazy allocation
+    struct proc* p = myproc();
+    if (va < p->sz && va >= p->trapframe->sp) {
+      uint64 newpageaddr = PGROUNDDOWN(va);
+      char* mem = kalloc();
+      if (mem == 0) {
+        return 0;
+      } else {
+        memset(mem, 0, PGSIZE);
+        if (mappages(pagetable, newpageaddr, PGSIZE, (uint64)mem, PTE_W | PTE_X | PTE_R | PTE_U) != 0) {
+          kfree(mem);
+          panic("usertrap(): map new page error");
+        }
+      }
+      pte = walk(pagetable, va, 0);
+    } else {
+      return 0;
+    }
+  }
+  if((*pte & PTE_U) == 0) {
     return 0;
-  if((*pte & PTE_U) == 0)
-    return 0;
+  }
   pa = PTE2PA(*pte);
   return pa;
 }

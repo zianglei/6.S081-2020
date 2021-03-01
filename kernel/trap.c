@@ -68,10 +68,10 @@ usertrap(void)
   } else if((which_dev = devintr()) != 0) {
       // ok
   } else if ((r_scause() == 13 || r_scause() == 15)
-        && r_stval() <= p->sz && r_stval() >= p->trapframe->sp) {
+        &&  r_stval() >= p->trapframe->sp) {
       uint64 faultaddr = r_stval();
 
-      if (p->sz < faultaddr) {
+      if (p->sz <= faultaddr) {
           // The virtual memory address is higher than the address that sbrk allocated.
           p->killed = 1;
       } else {
