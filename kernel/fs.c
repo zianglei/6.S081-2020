@@ -405,12 +405,15 @@ bmap(struct inode *ip, uint bn)
       // Load indirect block
       if((addr = ip->addrs[NDIRECT + 1] == 0))
           ip->addrs[NDIRECT + 1] = addr = balloc(ip->dev);
+
       bp = bread(ip->dev, addr);
       a = (uint*)bp->data;
       if ((addr = a[bn / NINDIRECT]) == 0) {
           a[bn / NINDIRECT] = addr = balloc(ip->dev);
           log_write(bp);
       }
+      brelse(bp);
+
       // Load doubly-indirect block
       struct buf* dbp;
       dbp = bread(ip->dev, addr);
@@ -420,7 +423,6 @@ bmap(struct inode *ip, uint bn)
           log_write(dbp);
       }
       brelse(dbp);
-      brelse(bp);
       return addr;
   }
 
@@ -463,10 +465,14 @@ itrunc(struct inode *ip)
               dbp = bread(ip->dev, a[j]);
               b = (uint *) dbp->data;
               for (int k = 0; k < NINDIRECT; k++) {
-                  if (b[k]) bfree(ip->dev, b[k]);
+                  if (b[k]) {
+                      bfree(ip->dev, b[k]);
+                      b[k] = 0;
+                  }
               }
               brelse(dbp);
               bfree(ip->dev, a[j]);
+              a[j] = 0;
           }
       }
       brelse(bp);

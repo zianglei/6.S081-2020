@@ -60,6 +60,7 @@ w_sstatus(uint64 x)
   asm volatile("csrw sstatus, %0" : : "r" (x));
 }
 
+
 // Supervisor Interrupt Pending
 static inline uint64
 r_sip()
@@ -285,6 +286,15 @@ r_sp()
   uint64 x;
   asm volatile("mv %0, sp" : "=r" (x) );
   return x;
+}
+
+
+static inline uint64
+r_fp()
+{
+    uint64 x;
+    asm volatile("mv %0, s0" : "=r" (x));
+    return x;
 }
 
 // read and write tp, the thread pointer, which holds
