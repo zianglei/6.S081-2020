@@ -403,7 +403,7 @@ bmap(struct inode *ip, uint bn)
   bn -= NINDIRECT;
   if (bn < NDBINDIRECT) {
       // Load indirect block
-      if((addr = ip->addrs[NDIRECT + 1] == 0))
+      if((addr = ip->addrs[NDIRECT + 1]) == 0)
           ip->addrs[NDIRECT + 1] = addr = balloc(ip->dev);
 
       bp = bread(ip->dev, addr);
